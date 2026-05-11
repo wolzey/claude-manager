@@ -62,11 +62,16 @@ func runSend(projectArg, workerName, message string, detach bool, budget float64
 		chosenModel = cfg.DefaultModel
 	}
 
+	permMode := w.PermissionMode
+	if permMode == "" {
+		permMode = cfg.DefaultPermission
+	}
+
 	if detach {
 		return runDetached(slug, w.Name, message, budget, chosenModel)
 	}
 
-	return runForeground(slug, w, message, budget, chosenModel, cfg.DefaultPermission)
+	return runForeground(slug, w, message, budget, chosenModel, permMode)
 }
 
 func runForeground(slug string, w *store.Worker, message string, budget float64, model, permMode string) error {
@@ -165,7 +170,10 @@ func detachedRunCmd() *cobra.Command {
 				return err
 			}
 			cfg, _ := config.Load()
-			permMode := cfg.DefaultPermission
+			permMode := w.PermissionMode
+			if permMode == "" {
+				permMode = cfg.DefaultPermission
+			}
 
 			lock, err := runner.Acquire(store.WorkerLockFile(slug, worker))
 			if err != nil {
