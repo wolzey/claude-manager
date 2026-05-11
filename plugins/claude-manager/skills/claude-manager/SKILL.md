@@ -30,18 +30,31 @@ cmgr project rm <name> --yes
 
 ### Workers
 ```
-cmgr worker add <project> <name> --repo <abs-path> [--allowed-tools "..."] [--model opus]
+cmgr worker add <project> <name> --repo <abs-path> [--mode plan|acceptEdits|readonly] [--allowed-tools "..."] [--model opus]
 cmgr worker ls <project>
 cmgr worker show <project> <name>
 cmgr worker rm <project> <name>
 ```
 
-`--repo` must be absolute. The worker name is the human-readable handle; session UUIDs are auto-allocated.
+`--repo` must be absolute. The worker name is the human-readable handle; session UUIDs are auto-allocated. `--mode` sets the worker's default permission mode; **defaults to `plan`** so every interaction produces a reviewable plan before any changes are made. Override per-send with `cmgr send … --mode acceptEdits` once you've approved a plan.
+
+### Plans (review + approve)
+```
+cmgr plan list <project>
+cmgr plan show <project> <worker>
+cmgr plan approve <project> <worker> [--with "extra context"] [--persist]
+cmgr plan reject  <project> <worker> --feedback "<text>"
+cmgr plan history <project> <worker>
+```
+
+- `plan approve` sends `"APPROVED. Execute the plan you just proposed."` to the worker with a one-shot `--mode acceptEdits` override. The worker's `default_mode` stays `plan`; pass `--persist` (or set `approval_persists: true` in config) to flip it permanently to `acceptEdits`.
+- `plan reject --feedback "..."` sends the feedback back to the worker, still in plan mode, so it can revise.
+- `plan history` lists every plan saved under `<project>/plans/` (one timestamped file per proposal).
 
 ### Messaging
 ```
-cmgr send <project> <worker> "<message>" [--detach] [--budget 5] [--model opus]
-cmgr broadcast <project> "<message>" [--detach] [--budget 5]
+cmgr send <project> <worker> "<message>" [--detach] [--budget 5] [--model opus] [--mode plan|acceptEdits|readonly]
+cmgr broadcast <project> "<message>" [--detach] [--budget 5] [--mode plan|acceptEdits|readonly]
 cmgr log <project> <worker> [--raw] [--follow]
 cmgr status <project>
 cmgr inbox <project> [--consume] [--format json]
@@ -80,6 +93,17 @@ cmgr contract path <project>
 `contract.md` is plain markdown. Manager sessions can also Read/Edit it directly via Claude's tools — `cmgr contract path` just resolves the absolute path.
 
 ## Key patterns
+
+### Plan-first workflow (default)
+
+Workers run in `plan` mode by default. Every task goes through:
+
+1. **Dispatch:** `cmgr send <proj> <worker> "do X"`. The worker investigates, drafts a plan, and exits without making changes.
+2. **Review:** Plan appears as the send's stdout AND as a pulsing amber `PLAN PENDING` pill in the dashboard. `cmgr plan show <proj> <worker>` prints it from disk; the dashboard auto-opens the plan in a slide-over when the worker row is clicked.
+3. **Iterate (optional):** `cmgr plan reject <proj> <worker> --feedback "skip step 3, also handle Y"` — worker re-proposes.
+4. **Approve:** `cmgr plan approve <proj> <worker>` OR click "Approve & execute" in the dashboard. Worker executes with a one-shot `acceptEdits` override; status returns to `idle`. Next interaction is plan-first again.
+
+`cmgr wait <proj> --worker <name> --for plan_pending` blocks until a plan lands — useful when chaining a dispatch with a review step in Claude.
 
 ### Cross-repo contract change
 1. Manager and user decide a shape change ("the API now returns `subscription_id` as snake_case").

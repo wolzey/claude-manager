@@ -33,11 +33,12 @@ triggering event. Exits 2 on timeout. Use to gate Claude on async sends without 
   cmgr wait <proj> --worker backend --for completed --timeout 10m
 
 Conditions:
-  completed  worker transitions to idle, or inbox event of type "completed"
-  error      worker transitions to error, or inbox event of type "error"
-  idle       worker is currently (or becomes) idle
-  change     any state change for the target (default)
-  inbox      inbox.jsonl grows`,
+  completed     worker transitions to idle, or inbox event of type "completed"
+  error         worker transitions to error, or inbox event of type "error"
+  idle          worker is currently (or becomes) idle
+  plan_pending  worker transitions to plan_pending or an inbox plan_proposed event arrives
+  change        any state change for the target (default)
+  inbox         inbox.jsonl grows`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := store.Slugify(args[0])
@@ -65,11 +66,11 @@ Conditions:
 }
 
 func runWait(slug, workerFilter, forCond string, timeout time.Duration, debounceMS int) int {
-	// Fast path — "idle" is satisfied immediately if the worker is already idle.
-	if forCond == "idle" && workerFilter != "" {
-		if w, err := store.LoadWorker(slug, workerFilter); err == nil && string(w.Status) == "idle" {
+	// Fast path — "idle" / "plan_pending" satisfy immediately if already true.
+	if (forCond == "idle" || forCond == "plan_pending") && workerFilter != "" {
+		if w, err := store.LoadWorker(slug, workerFilter); err == nil && string(w.Status) == forCond {
 			emitJSON(map[string]any{
-				"kind": "worker_changed", "project": slug, "worker": w.Name, "status": "idle",
+				"kind": "worker_changed", "project": slug, "worker": w.Name, "status": forCond,
 				"ts": time.Now().UTC().Format(time.RFC3339Nano),
 			})
 			return exitOK
@@ -141,6 +142,16 @@ func matchesCondition(ev dashboard.Event, cond string) bool {
 		return false
 	case "idle":
 		return ev.Kind == dashboard.KindWorkerChanged && ev.Status == "idle"
+	case "plan_pending":
+		if ev.Kind == dashboard.KindWorkerChanged && ev.Status == "plan_pending" {
+			return true
+		}
+		if ev.Kind == dashboard.KindInboxAppended {
+			if payload, ok := ev.Payload.(map[string]any); ok && payload["type"] == "plan_proposed" {
+				return true
+			}
+		}
+		return false
 	case "inbox":
 		return ev.Kind == dashboard.KindInboxAppended
 	case "change":

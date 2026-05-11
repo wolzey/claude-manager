@@ -118,6 +118,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 .project-row .meta .live { color: var(--signal); }
 .project-row .meta .err { color: var(--error); }
+.project-row .meta .pend { color: var(--locked); }
 
 .sidebar-footer {
   border-top: 1px solid var(--hairline);
@@ -283,6 +284,12 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .pill.locked  .dot { background: var(--locked); }
 .pill.error   { color: var(--error); }
 .pill.error   .dot { background: var(--error); }
+.pill.plan_pending { color: var(--locked); }
+.pill.plan_pending .dot { background: var(--locked); animation: pulse-amber 2.4s ease-in-out infinite; }
+@keyframes pulse-amber {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(245, 196, 108, 0); }
+  50%      { opacity: 0.5; box-shadow: 0 0 0 3px rgba(245, 196, 108, 0.18); }
+}
 
 @keyframes pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(94, 234, 212, 0); }
@@ -445,6 +452,67 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .tail-system .tail-prefix { color: var(--fg-faint); }
 
 .tail-btn { display: inline-flex; align-items: center; }
+
+/* ─────────── plan review panel ─────────── */
+
+.plan-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface-3);
+  border-top: 1px solid var(--hairline-2);
+  padding: var(--s-4) 0 0;
+  margin-top: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.plan-actions .row {
+  display: flex;
+  gap: var(--s-3);
+  align-items: center;
+}
+.plan-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 10px 16px;
+  border: 1px solid var(--hairline-2);
+  background: var(--surface-2);
+  color: var(--fg);
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+}
+.plan-btn:hover { background: var(--surface-3); }
+.plan-btn.approve { border-color: rgba(94, 234, 212, 0.4); color: var(--signal); }
+.plan-btn.approve:hover { border-color: var(--signal); background: rgba(94, 234, 212, 0.06); }
+.plan-btn.reject { border-color: rgba(245, 196, 108, 0.4); color: var(--locked); }
+.plan-btn.reject:hover { border-color: var(--locked); background: rgba(245, 196, 108, 0.05); }
+.plan-actions textarea {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--hairline);
+  padding: var(--s-3);
+  min-height: 90px;
+  width: 100%;
+  resize: vertical;
+}
+.plan-actions textarea:focus { outline: none; border-color: var(--hairline-2); }
+.plan-actions .persist-toggle {
+  font-size: 11px;
+  color: var(--fg-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.plan-actions .persist-toggle input { accent-color: var(--signal); }
+.plan-actions .feedback-pane { display: none; }
+.plan-actions .feedback-pane.open { display: flex; flex-direction: column; gap: var(--s-2); }
+.plan-actions .status-line { font-size: 11px; color: var(--fg-muted); }
+.plan-actions .status-line.err { color: var(--error); }
+.plan-actions .status-line.ok { color: var(--signal); }
 
 /* ─────────── page-load reveal ─────────── */
 

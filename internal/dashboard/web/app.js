@@ -58,6 +58,10 @@ function renderSidebar() {
     const runSpan = el('span', p.running ? 'live' : null, `${p.running || 0} running`);
     const errSpan = el('span', p.error ? 'err' : null, `${p.error || 0} errors`);
     meta.append(idleSpan, document.createTextNode(' · '), runSpan, document.createTextNode(' · '), errSpan);
+    if (p.plan_pending) {
+      const pendSpan = el('span', 'pend', `${p.plan_pending} plan${p.plan_pending > 1 ? 's' : ''} pending`);
+      meta.append(document.createElement('br'), pendSpan);
+    }
     row.appendChild(meta);
 
     row.addEventListener('click', () => activate(p.slug));
@@ -90,7 +94,13 @@ function renderDetail() {
 
   const list = $('workers');
   list.innerHTML = '';
-  for (const w of (workers || [])) list.appendChild(workerRow(w));
+  const sorted = (workers || []).slice().sort((a, b) => {
+    const aPend = a.status === 'plan_pending' ? 0 : 1;
+    const bPend = b.status === 'plan_pending' ? 0 : 1;
+    if (aPend !== bPend) return aPend - bPend;
+    return a.name.localeCompare(b.name);
+  });
+  for (const w of sorted) list.appendChild(workerRow(w));
 
   if (inbox_pending && inbox_pending > 0) {
     $('inbox-section').hidden = false;
@@ -146,6 +156,10 @@ function workerRow(w) {
   expand.appendChild(inner);
 
   row.addEventListener('click', () => {
+    if (w.status === 'plan_pending') {
+      openPlanReview(w.name);
+      return;
+    }
     const isOpen = expand.classList.toggle('open');
     row.classList.toggle('expanded', isOpen);
     state.expandedWorker = isOpen ? w.name : null;
@@ -164,6 +178,7 @@ function pill(w) {
   let cls = 'idle';
   let label = 'IDLE';
   if (w.status === 'running') { cls = 'running'; label = 'RUNNING'; }
+  else if (w.status === 'plan_pending') { cls = 'plan_pending'; label = 'PLAN PENDING'; }
   else if (w.status === 'error') { cls = 'error'; label = 'ERROR'; }
   else if (w.locked) { cls = 'locked'; label = 'LOCKED'; }
   const p = el('span', `pill ${cls}`);
@@ -269,6 +284,108 @@ async function openContract() {
   } catch (e) {
     $('panel-body').textContent = 'Failed to load contract.';
   }
+}
+
+async function openPlanReview(workerName) {
+  if (!state.activeSlug) return;
+  closeTailStream();
+  $('panel-label').textContent = `PLAN · ${workerName}`;
+  const body = $('panel-body');
+  body.innerHTML = '<div class="md">(loading…)</div>';
+  showPanel();
+
+  let data;
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(state.activeSlug)}/workers/${encodeURIComponent(workerName)}/plan`);
+    if (res.status === 204) {
+      body.innerHTML = '<div>(no pending plan for this worker)</div>';
+      return;
+    }
+    data = await res.json();
+  } catch (e) {
+    body.innerHTML = '<div>Failed to load plan.</div>';
+    return;
+  }
+
+  body.innerHTML = '';
+  const mdWrap = el('div', 'md');
+  mdWrap.appendChild(renderMarkdown(data.body || ''));
+  body.appendChild(mdWrap);
+
+  const actions = el('div', 'plan-actions');
+  const row1 = el('div', 'row');
+  const approveBtn = el('button', 'plan-btn approve', 'Approve & execute');
+  const rejectBtn = el('button', 'plan-btn reject', 'Reject with feedback');
+  const persistLabel = el('label', 'persist-toggle');
+  const persistInput = document.createElement('input');
+  persistInput.type = 'checkbox';
+  persistLabel.appendChild(persistInput);
+  persistLabel.appendChild(document.createTextNode('Persist mode (flip default to acceptEdits)'));
+  row1.append(approveBtn, rejectBtn, persistLabel);
+
+  const feedbackPane = el('div', 'feedback-pane');
+  const ta = document.createElement('textarea');
+  ta.placeholder = 'Tell the worker what to revise. They’ll re-propose a plan; no changes will be made.';
+  const sendFeedback = el('button', 'plan-btn reject', 'Send feedback');
+  feedbackPane.append(ta, sendFeedback);
+
+  const statusLine = el('div', 'status-line');
+
+  actions.append(row1, feedbackPane, statusLine);
+  body.appendChild(actions);
+
+  approveBtn.addEventListener('click', async () => {
+    statusLine.className = 'status-line';
+    statusLine.textContent = 'Sending approval…';
+    try {
+      const r = await fetch(`/api/projects/${encodeURIComponent(state.activeSlug)}/workers/${encodeURIComponent(workerName)}/plan/approve`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({persist: persistInput.checked}),
+      });
+      if (r.ok) {
+        statusLine.classList.add('ok');
+        statusLine.textContent = 'Approved — worker is executing. Watch the row status update live.';
+        approveBtn.disabled = true;
+        rejectBtn.disabled = true;
+      } else {
+        statusLine.classList.add('err');
+        statusLine.textContent = `Approve failed: HTTP ${r.status}`;
+      }
+    } catch (e) {
+      statusLine.classList.add('err');
+      statusLine.textContent = `Approve failed: ${e.message || e}`;
+    }
+  });
+
+  rejectBtn.addEventListener('click', () => {
+    feedbackPane.classList.toggle('open');
+    if (feedbackPane.classList.contains('open')) ta.focus();
+  });
+
+  sendFeedback.addEventListener('click', async () => {
+    const feedback = ta.value.trim();
+    if (!feedback) { ta.focus(); return; }
+    statusLine.className = 'status-line';
+    statusLine.textContent = 'Sending feedback…';
+    try {
+      const r = await fetch(`/api/projects/${encodeURIComponent(state.activeSlug)}/workers/${encodeURIComponent(workerName)}/plan/reject`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({feedback}),
+      });
+      if (r.ok) {
+        statusLine.classList.add('ok');
+        statusLine.textContent = 'Feedback sent — worker is revising the plan.';
+        approveBtn.disabled = true;
+        sendFeedback.disabled = true;
+      } else {
+        statusLine.classList.add('err');
+        statusLine.textContent = `Reject failed: HTTP ${r.status}`;
+      }
+    } catch (e) {
+      statusLine.classList.add('err');
+      statusLine.textContent = `Reject failed: ${e.message || e}`;
+    }
+  });
 }
 
 function openLiveTail(workerName) {

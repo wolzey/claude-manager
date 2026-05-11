@@ -14,25 +14,29 @@ import (
 type WorkerStatus string
 
 const (
-	StatusIdle    WorkerStatus = "idle"
-	StatusRunning WorkerStatus = "running"
-	StatusError   WorkerStatus = "error"
+	StatusIdle        WorkerStatus = "idle"
+	StatusRunning     WorkerStatus = "running"
+	StatusPlanPending WorkerStatus = "plan_pending"
+	StatusError       WorkerStatus = "error"
 )
 
 type Worker struct {
-	Name         string       `json:"name"`
-	SessionID    string       `json:"session_id"`
-	RepoPath     string       `json:"repo_path"`
-	AllowedTools string       `json:"allowed_tools,omitempty"`
-	Model        string       `json:"model,omitempty"`
-	Status       WorkerStatus `json:"status"`
-	Initialized  bool         `json:"initialized"`
-	LastRunAt    *time.Time   `json:"last_run_at,omitempty"`
-	LastError    string       `json:"last_error,omitempty"`
-	CreatedAt    time.Time    `json:"created_at"`
+	Name          string       `json:"name"`
+	SessionID     string       `json:"session_id"`
+	RepoPath      string       `json:"repo_path"`
+	AllowedTools  string       `json:"allowed_tools,omitempty"`
+	Model         string       `json:"model,omitempty"`
+	DefaultMode   string       `json:"default_mode,omitempty"`
+	Status        WorkerStatus `json:"status"`
+	Initialized   bool         `json:"initialized"`
+	LastRunAt     *time.Time   `json:"last_run_at,omitempty"`
+	LastError     string       `json:"last_error,omitempty"`
+	PendingPlan   string       `json:"pending_plan,omitempty"`
+	PendingPlanAt *time.Time   `json:"pending_plan_at,omitempty"`
+	CreatedAt     time.Time    `json:"created_at"`
 }
 
-func CreateWorker(slug, name, repoPath, allowedTools, model string) (*Worker, error) {
+func CreateWorker(slug, name, repoPath, allowedTools, model, defaultMode string) (*Worker, error) {
 	if err := RequireProject(slug); err != nil {
 		return nil, err
 	}
@@ -59,6 +63,7 @@ func CreateWorker(slug, name, repoPath, allowedTools, model string) (*Worker, er
 		RepoPath:     repoPath,
 		AllowedTools: allowedTools,
 		Model:        model,
+		DefaultMode:  defaultMode,
 		Status:       StatusIdle,
 		CreatedAt:    time.Now().UTC(),
 	}

@@ -25,6 +25,7 @@ func Root() *cobra.Command {
 		dashboardCmd(),
 		watchCmd(),
 		waitCmd(),
+		planCmd(),
 	)
 	return root
 }

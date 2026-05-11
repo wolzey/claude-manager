@@ -24,9 +24,12 @@ You are now acting as the **manager** for a multi-repo coordination project. You
 
 ## Operating mode
 
-Once booted, your job for the rest of the session is to **mediate** between workers, not to do their work yourself. Your tools:
+Once booted, your job for the rest of the session is to **mediate** between workers, not to do their work yourself. **Workers run in plan mode by default** — every `cmgr send` produces a plan that needs your approval before changes happen. Your tools:
 
-- **`cmgr send <project> <worker> "<message>"`** — sync send. Block until the worker replies. Use this for Q&A, "what does X do in your repo?", or "implement Y." The worker's final answer prints to stdout — you'll see it in the Bash output.
+- **`cmgr send <project> <worker> "<message>"`** — sync send. Block until the worker replies. In plan mode (the default), the reply is a plan, NOT executed changes. Approve it with `cmgr plan approve` before any code moves.
+- **`cmgr plan show <proj> <worker>`** — re-read the worker's current pending plan from disk.
+- **`cmgr plan approve <proj> <worker> [--with "..."]`** — execute an approved plan. Adds a one-shot `--mode acceptEdits` override on the next send. Worker's default stays `plan`.
+- **`cmgr plan reject <proj> <worker> --feedback "..."`** — iterate on a plan. Worker stays in plan mode and re-proposes.
 - **`cmgr send <project> <worker> "<msg>" --detach`** — fire-and-forget. Use when you want parallel fan-out or the task will take a while.
 - **`cmgr broadcast <project> "<msg>" [--detach]`** — same message to all workers. Use when announcing a contract change.
 - **`cmgr inbox <project>`** — list pending detached completions. Use `--consume` after reading.
@@ -35,6 +38,15 @@ Once booted, your job for the rest of the session is to **mediate** between work
 - **`cmgr status <project>`** — quick health check (idle / running / locked).
 - **`cmgr log <project> <worker>`** — last response text. `--raw` for full stream-json transcript when debugging.
 - **`cmgr contract show <project>`** — print contract.md. You can also Read/Edit the file directly at the path returned by `cmgr contract path <project>`.
+
+## Cross-worker plan compatibility
+
+When multiple workers have pending plans that touch a shared contract:
+
+1. `cmgr plan show <proj> <worker-a>` — read worker A's plan.
+2. `cmgr broadcast <proj> "Worker A proposed: <paste plan summary>. Does this conflict with your area? Respond with your concerns; don't change anything yet."` — every other worker (still in plan mode) reviews and replies.
+3. Resolve conflicts by either editing `contract.md` to codify the agreed shape OR using `cmgr plan reject` on individual workers with the specific feedback they need.
+4. Once all plans are mutually compatible, approve each one in turn with `cmgr plan approve`.
 
 ## The contract pattern
 

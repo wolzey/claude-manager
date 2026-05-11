@@ -15,8 +15,9 @@ import (
 
 // Server wraps the embedded HTTP server. One process can own one server.
 type Server struct {
-	watcher *Watcher
-	assets  fs.FS
+	watcher  *Watcher
+	assets   fs.FS
+	approver PlanApprover
 }
 
 func NewServer(watcher *Watcher, assets fs.FS) *Server {
@@ -51,6 +52,7 @@ type projectSummary struct {
 	WorkerCount    int        `json:"worker_count"`
 	Idle           int        `json:"idle"`
 	Running        int        `json:"running"`
+	PlanPending    int        `json:"plan_pending"`
 	Error          int        `json:"error"`
 	Locked         int        `json:"locked"`
 	InboxPending   int        `json:"inbox_pending"`
@@ -92,12 +94,22 @@ func (s *Server) handleProjectSub(w http.ResponseWriter, r *http.Request) {
 		s.writeContract(w, slug)
 	case len(parts) == 2 && parts[1] == "inbox":
 		s.writeInbox(w, slug)
+	case len(parts) == 2 && parts[1] == "plans":
+		s.listPendingPlans(w, r, slug)
 	case len(parts) == 3 && parts[1] == "workers":
 		s.writeWorker(w, r, slug, parts[2])
 	case len(parts) == 4 && parts[1] == "workers" && parts[3] == "log":
 		s.writeWorkerLog(w, r, slug, parts[2])
 	case len(parts) == 5 && parts[1] == "workers" && parts[3] == "log" && parts[4] == "stream":
 		s.writeLogStream(w, r, slug, parts[2])
+	case len(parts) == 4 && parts[1] == "workers" && parts[3] == "plan":
+		s.currentPlan(w, r, slug, parts[2])
+	case len(parts) == 5 && parts[1] == "workers" && parts[3] == "plan" && parts[4] == "history":
+		s.planHistory(w, r, slug, parts[2])
+	case len(parts) == 5 && parts[1] == "workers" && parts[3] == "plan" && parts[4] == "approve":
+		s.approvePlan(w, r, slug, parts[2])
+	case len(parts) == 5 && parts[1] == "workers" && parts[3] == "plan" && parts[4] == "reject":
+		s.rejectPlan(w, r, slug, parts[2])
 	default:
 		http.NotFound(w, r)
 	}
@@ -239,6 +251,8 @@ func summarize(p *store.Project) projectSummary {
 			out.Running++
 		case store.StatusError:
 			out.Error++
+		case store.StatusPlanPending:
+			out.PlanPending++
 		default:
 			out.Idle++
 		}

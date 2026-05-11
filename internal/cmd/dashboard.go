@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/wolzey/claude-manager/internal/config"
 	"github.com/wolzey/claude-manager/internal/dashboard"
 	"github.com/wolzey/claude-manager/internal/dashboard/web"
+	"github.com/wolzey/claude-manager/internal/store"
 )
 
 func dashboardCmd() *cobra.Command {
@@ -62,6 +64,7 @@ func runDashboard(host string, port int, openBrowser, noWatch bool, debounceMS i
 	}
 
 	srv := dashboard.NewServer(w, web.Assets())
+	srv.SetApprover(&dashboardApprover{})
 	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	httpSrv := &http.Server{
 		Addr:              addr,
@@ -92,6 +95,35 @@ func runDashboard(host string, port int, openBrowser, noWatch bool, debounceMS i
 		return err
 	}
 	return nil
+}
+
+// dashboardApprover satisfies dashboard.PlanApprover by reusing the same
+// approve/reject prompts and runSend path that `cmgr plan` uses. Kept in
+// internal/cmd to avoid an import cycle (dashboard ↘ cmd would loop back via
+// the runner and store packages).
+type dashboardApprover struct{}
+
+func (dashboardApprover) Approve(slug, worker, extraContext string, persist bool) error {
+	prompt := approvalPromptTmpl
+	if extraContext = strings.TrimSpace(extraContext); extraContext != "" {
+		prompt += "\n\nAdditional context: " + extraContext
+	}
+	if err := runSend(slug, worker, prompt, false, 0, "", "acceptEdits"); err != nil {
+		return err
+	}
+	if persist {
+		w, _ := store.LoadWorker(slug, worker)
+		if w != nil {
+			w.DefaultMode = "acceptEdits"
+			_ = store.SaveWorker(slug, w)
+		}
+	}
+	return nil
+}
+
+func (dashboardApprover) Reject(slug, worker, feedback string) error {
+	prompt := fmt.Sprintf(rejectionPromptTmpl, feedback)
+	return runSend(slug, worker, prompt, false, 0, "", "plan")
 }
 
 func openInBrowser(url string) error {

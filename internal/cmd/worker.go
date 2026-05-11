@@ -21,7 +21,7 @@ func workerCmd() *cobra.Command {
 }
 
 func workerAddCmd() *cobra.Command {
-	var repo, allowedTools, model string
+	var repo, allowedTools, model, mode string
 	c := &cobra.Command{
 		Use:   "add <project> <name>",
 		Short: "Register a worker against a repo",
@@ -35,7 +35,13 @@ func workerAddCmd() *cobra.Command {
 			if allowedTools == "" {
 				allowedTools = cfg.DefaultAllowedTools
 			}
-			w, err := store.CreateWorker(slug, args[1], repo, allowedTools, model)
+			if mode == "" {
+				mode = cfg.DefaultWorkerMode
+			}
+			if err := validateMode(mode); err != nil {
+				return err
+			}
+			w, err := store.CreateWorker(slug, args[1], repo, allowedTools, model, mode)
 			if err != nil {
 				return err
 			}
@@ -43,14 +49,27 @@ func workerAddCmd() *cobra.Command {
 			fmt.Printf("  session_id:    %s\n", w.SessionID)
 			fmt.Printf("  repo_path:     %s\n", w.RepoPath)
 			fmt.Printf("  allowed_tools: %s\n", w.AllowedTools)
+			fmt.Printf("  default_mode:  %s\n", w.DefaultMode)
 			return nil
 		},
 	}
 	c.Flags().StringVar(&repo, "repo", "", "absolute path to the repo this worker operates in (required)")
 	c.Flags().StringVar(&allowedTools, "allowed-tools", "", "claude --allowed-tools value; defaults from config.yaml")
 	c.Flags().StringVar(&model, "model", "", "claude --model value (e.g. opus, sonnet)")
+	c.Flags().StringVar(&mode, "mode", "", "default permission mode: plan | acceptEdits | readonly (default 'plan' from config)")
 	_ = c.MarkFlagRequired("repo")
 	return c
+}
+
+// validateMode rejects unknown permission modes. Accepts the three modes we
+// expose through cmgr; anything else gets surfaced as an error before we
+// hand it to claude -p.
+func validateMode(m string) error {
+	switch m {
+	case "plan", "acceptEdits", "readonly", "default", "":
+		return nil
+	}
+	return fmt.Errorf("invalid mode %q: must be one of plan | acceptEdits | readonly | default", m)
 }
 
 func workerLsCmd() *cobra.Command {
@@ -94,12 +113,16 @@ func workerShowCmd() *cobra.Command {
 			fmt.Printf("repo_path:     %s\n", w.RepoPath)
 			fmt.Printf("allowed_tools: %s\n", w.AllowedTools)
 			fmt.Printf("model:         %s\n", w.Model)
+			fmt.Printf("default_mode:  %s\n", w.DefaultMode)
 			fmt.Printf("status:        %s\n", w.Status)
 			if w.LastRunAt != nil {
 				fmt.Printf("last_run_at:   %s\n", w.LastRunAt.Format("2006-01-02 15:04:05"))
 			}
 			if w.LastError != "" {
 				fmt.Printf("last_error:    %s\n", w.LastError)
+			}
+			if w.PendingPlan != "" {
+				fmt.Printf("pending_plan:  %s\n", w.PendingPlan)
 			}
 			fmt.Printf("created_at:    %s\n", w.CreatedAt.Format("2006-01-02 15:04:05"))
 			fmt.Printf("log:           %s\n", store.WorkerLogFile(slug, w.Name))

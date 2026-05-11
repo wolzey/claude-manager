@@ -27,6 +27,12 @@ func LogsDir(slug string) string { return filepath.Join(ProjectDir(slug), "logs"
 
 func LocksDir(slug string) string { return filepath.Join(ProjectDir(slug), "locks") }
 
+func PlansDir(slug string) string { return filepath.Join(ProjectDir(slug), "plans") }
+
+func PlanFile(slug, worker, timestamp string) string {
+	return filepath.Join(PlansDir(slug), worker+"-"+timestamp+".md")
+}
+
 func ProjectFile(slug string) string { return filepath.Join(ProjectDir(slug), "project.json") }
 
 func ContractFile(slug string) string { return filepath.Join(ProjectDir(slug), "contract.md") }

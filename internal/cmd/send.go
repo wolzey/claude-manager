@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -21,27 +23,32 @@ type InboxEvent struct {
 	Error      string    `json:"error,omitempty"`
 	DurationMS int64     `json:"duration_ms,omitempty"`
 	CostUSD    float64   `json:"cost_usd,omitempty"`
+	PlanPath   string    `json:"plan_path,omitempty"`
 }
 
 func sendCmd() *cobra.Command {
 	var detach bool
 	var budget float64
-	var model string
+	var model, mode string
 	c := &cobra.Command{
 		Use:   "send <project> <worker> <message>",
 		Short: "Send a message to a worker (sync by default, --detach for async)",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSend(args[0], args[1], args[2], detach, budget, model)
+			if err := validateMode(mode); err != nil {
+				return err
+			}
+			return runSend(args[0], args[1], args[2], detach, budget, model, mode)
 		},
 	}
 	c.Flags().BoolVar(&detach, "detach", false, "fire-and-forget; result lands in inbox.jsonl")
 	c.Flags().Float64Var(&budget, "budget", 0, "max-budget-usd cap (0 = use config default)")
 	c.Flags().StringVar(&model, "model", "", "override worker's default model")
+	c.Flags().StringVar(&mode, "mode", "", "one-shot permission mode override: plan | acceptEdits | readonly")
 	return c
 }
 
-func runSend(projectArg, workerName, message string, detach bool, budget float64, model string) error {
+func runSend(projectArg, workerName, message string, detach bool, budget float64, model, mode string) error {
 	slug := store.Slugify(projectArg)
 	w, err := store.LoadWorker(slug, workerName)
 	if err != nil {
@@ -61,12 +68,24 @@ func runSend(projectArg, workerName, message string, detach bool, budget float64
 	if chosenModel == "" {
 		chosenModel = cfg.DefaultModel
 	}
+	chosenMode := resolveMode(mode, w.DefaultMode, cfg.DefaultPermission)
 
 	if detach {
-		return runDetached(slug, w.Name, message, budget, chosenModel)
+		return runDetached(slug, w.Name, message, budget, chosenModel, chosenMode)
 	}
 
-	return runForeground(slug, w, message, budget, chosenModel, cfg.DefaultPermission)
+	return runForeground(slug, w, message, budget, chosenModel, chosenMode)
+}
+
+// resolveMode applies the per-send → per-worker → config-default resolution
+// order. "default" is treated as "fall through to the next layer."
+func resolveMode(send, worker, cfg string) string {
+	for _, m := range []string{send, worker, cfg} {
+		if m != "" && m != "default" {
+			return m
+		}
+	}
+	return "acceptEdits"
 }
 
 func runForeground(slug string, w *store.Worker, message string, budget float64, model, permMode string) error {
@@ -105,6 +124,27 @@ func runForeground(slug string, w *store.Worker, message string, budget float64,
 	if res.IsError {
 		w.Status = store.StatusError
 		w.LastError = res.Text
+	} else if permMode != "plan" && w.PendingPlan != "" {
+		// Successful non-plan execution clears any prior pending plan (this is
+		// what `cmgr plan approve` relies on — the plan is now executed).
+		w.PendingPlan = ""
+		w.PendingPlanAt = nil
+		w.Status = store.StatusIdle
+		w.LastError = ""
+		w.Initialized = true
+	} else if permMode == "plan" && strings.TrimSpace(res.Text) != "" {
+		planPath, err := capturePlan(slug, w.Name, res.Text)
+		if err == nil {
+			w.PendingPlan = planPath
+			now := time.Now().UTC()
+			w.PendingPlanAt = &now
+			w.Status = store.StatusPlanPending
+		} else {
+			fmt.Fprintf(os.Stderr, "[cmgr] failed to persist plan: %v\n", err)
+			w.Status = store.StatusIdle
+		}
+		w.LastError = ""
+		w.Initialized = true
 	} else {
 		w.Status = store.StatusIdle
 		w.LastError = ""
@@ -117,20 +157,47 @@ func runForeground(slug string, w *store.Worker, message string, budget float64,
 	}
 
 	fmt.Println(res.Text)
-	fmt.Fprintf(os.Stderr, "\n[cmgr] worker=%s elapsed=%s cost=$%.4f stop_reason=%s\n",
-		w.Name, elapsed.Round(time.Millisecond), res.TotalCostUSD, res.StopReason)
+	fmt.Fprintf(os.Stderr, "\n[cmgr] worker=%s mode=%s elapsed=%s cost=$%.4f stop_reason=%s\n",
+		w.Name, permMode, elapsed.Round(time.Millisecond), res.TotalCostUSD, res.StopReason)
+	if w.Status == store.StatusPlanPending {
+		fmt.Fprintf(os.Stderr, "[cmgr] plan saved to %s — review with `cmgr plan show %s %s`\n",
+			w.PendingPlan, slug, w.Name)
+	}
 	if res.IsError {
 		return fmt.Errorf("worker reported error")
 	}
 	return nil
 }
 
-func runDetached(slug, worker, message string, budget float64, model string) error {
+// capturePlan persists the worker's plan-mode result text to a timestamped
+// file under plans/. Returns the project-relative path so it can be stored on
+// Worker.PendingPlan.
+func capturePlan(slug, workerName, text string) (string, error) {
+	ts := time.Now().UTC().Format("2006-01-02T15-04-05")
+	abs := store.PlanFile(slug, workerName, ts)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(abs, []byte(text), 0o644); err != nil {
+		return "", err
+	}
+	// Return path relative to the project dir so it's portable across machines.
+	rel, err := filepath.Rel(store.ProjectDir(slug), abs)
+	if err != nil {
+		return abs, nil
+	}
+	return rel, nil
+}
+
+func runDetached(slug, worker, message string, budget float64, model, mode string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	args := []string{"_run-detached", slug, worker, message, fmt.Sprintf("%.4f", budget), model}
+	if mode == "" {
+		mode = "default"
+	}
+	args := []string{"_run-detached", slug, worker, message, fmt.Sprintf("%.4f", budget), model, mode}
 	cmd := exec.Command(exe, args...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -140,7 +207,7 @@ func runDetached(slug, worker, message string, budget float64, model string) err
 	}
 	pid := cmd.Process.Pid
 	_ = cmd.Process.Release()
-	fmt.Printf("dispatched worker=%s pid=%d (check `cmgr inbox %s` for result)\n", worker, pid, slug)
+	fmt.Printf("dispatched worker=%s mode=%s pid=%d (check `cmgr inbox %s` for result)\n", worker, mode, pid, slug)
 	return nil
 }
 
@@ -151,21 +218,25 @@ func init() {
 
 func detachedRunCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:    "_run-detached <slug> <worker> <message> <budget> <model>",
+		Use:    "_run-detached <slug> <worker> <message> <budget> <model> <mode>",
 		Hidden: true,
-		Args:   cobra.ExactArgs(5),
+		Args:   cobra.RangeArgs(5, 6),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug, worker, message := args[0], args[1], args[2]
 			var budget float64
 			fmt.Sscanf(args[3], "%f", &budget)
 			model := args[4]
+			modeArg := ""
+			if len(args) >= 6 {
+				modeArg = args[5]
+			}
 
 			w, err := store.LoadWorker(slug, worker)
 			if err != nil {
 				return err
 			}
 			cfg, _ := config.Load()
-			permMode := cfg.DefaultPermission
+			permMode := resolveMode(modeArg, w.DefaultMode, cfg.DefaultPermission)
 
 			lock, err := runner.Acquire(store.WorkerLockFile(slug, worker))
 			if err != nil {
@@ -206,6 +277,24 @@ func detachedRunCmd() *cobra.Command {
 				ev.CostUSD = res.TotalCostUSD
 				w.Status = store.StatusError
 				w.LastError = res.Text
+			} else if permMode == "plan" && strings.TrimSpace(res.Text) != "" {
+				planPath, err := capturePlan(slug, worker, res.Text)
+				if err == nil {
+					w.PendingPlan = planPath
+					nowP := time.Now().UTC()
+					w.PendingPlanAt = &nowP
+					w.Status = store.StatusPlanPending
+					ev.Type = "plan_proposed"
+					ev.PlanPath = planPath
+				} else {
+					ev.Type = "completed"
+					w.Status = store.StatusIdle
+				}
+				ev.Result = res.Text
+				ev.CostUSD = res.TotalCostUSD
+				w.LastError = ""
+				w.Initialized = true
+				_ = os.WriteFile(store.WorkerLastFile(slug, worker), []byte(res.Text), 0o644)
 			} else {
 				ev.Type = "completed"
 				ev.Result = res.Text
