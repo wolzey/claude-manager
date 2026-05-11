@@ -1,0 +1,19 @@
+{
+  "name": "claude-manager",
+  "version": "0.1.0",
+  "description": "Multi-session Claude orchestrator. Drives headless `claude -p` worker sessions across multiple repos from one manager session. Subscription-billed.",
+  "author": {
+    "name": "Ethan Wolz",
+    "email": "ethan@ebsc.dev"
+  },
+  "homepage": "https://github.com/wolzey/claude-manager",
+  "repository": "https://github.com/wolzey/claude-manager",
+  "license": "MIT",
+  "keywords": [
+    "orchestration",
+    "multi-repo",
+    "headless",
+    "subscription",
+    "coordination"
+  ]
+}

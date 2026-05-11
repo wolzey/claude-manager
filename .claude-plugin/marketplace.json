@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "wolzey",
+  "description": "Personal Claude Code plugins by Ethan Wolz",
+  "owner": {
+    "name": "Ethan Wolz",
+    "email": "ethan@ebsc.dev"
+  },
+  "plugins": [
+    {
+      "name": "claude-manager",
+      "description": "Multi-session Claude orchestrator. Drives headless `claude -p` worker sessions across multiple repos from one manager session. Subscription-billed.",
+      "category": "development",
+      "source": "./plugins/claude-manager",
+      "homepage": "https://github.com/wolzey/claude-manager"
+    }
+  ]
+}
