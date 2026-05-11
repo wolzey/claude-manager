@@ -22,6 +22,9 @@ func Root() *cobra.Command {
 		inboxCmd(),
 		contractCmd(),
 		detachedRunCmd(),
+		dashboardCmd(),
+		watchCmd(),
+		waitCmd(),
 	)
 	return root
 }

@@ -13,6 +13,9 @@ type Config struct {
 	DefaultModel        string  `mapstructure:"default_model"`
 	DefaultAllowedTools string  `mapstructure:"default_allowed_tools"`
 	DefaultPermission   string  `mapstructure:"default_permission_mode"`
+	DashboardPort       int     `mapstructure:"dashboard_port"`
+	DashboardHost       string  `mapstructure:"dashboard_host"`
+	WatchDebounceMS     int     `mapstructure:"watch_debounce_ms"`
 }
 
 func Load() (*Config, error) {
@@ -27,6 +30,9 @@ func Load() (*Config, error) {
 	v.SetDefault("default_model", "")
 	v.SetDefault("default_allowed_tools", "Read,Edit,Write,Bash(git status),Bash(git diff *),Bash(ls *),Bash(rg *),Bash(cat *),Grep,Glob")
 	v.SetDefault("default_permission_mode", "acceptEdits")
+	v.SetDefault("dashboard_port", 7777)
+	v.SetDefault("dashboard_host", "127.0.0.1")
+	v.SetDefault("watch_debounce_ms", 100)
 
 	_ = os.MkdirAll(store.Root(), 0o755)
 	cfgPath := filepath.Join(store.Root(), "config.yaml")

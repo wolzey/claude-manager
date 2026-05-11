@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cmgr</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand"><em>CMGR</em></div>
+    <div class="hairline"></div>
+    <div class="section-label" id="projects-label">
+      <span>Projects</span>
+      <span class="count" id="projects-count">0</span>
+    </div>
+    <nav id="projects"></nav>
+    <div class="sidebar-footer">
+      <span class="status-dot" id="sse-dot"></span>
+      <span id="sse-label">connecting…</span>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div id="empty-state" class="empty">
+      <div class="empty-title">No project selected</div>
+      <div class="empty-hint">Choose a project from the left to see worker status.</div>
+    </div>
+    <div id="project-view" hidden>
+      <header class="project-header">
+        <h1 id="project-name"></h1>
+        <p id="project-description"></p>
+        <div class="header-actions">
+          <button class="link-btn" id="open-contract">Open contract <span class="chev">→</span></button>
+          <button class="link-btn" id="open-inbox">Open inbox <span class="chev">→</span></button>
+        </div>
+      </header>
+      <div class="hairline-full"></div>
+
+      <section>
+        <div class="section-label row">
+          <span>Workers</span>
+          <span class="rollup" id="workers-rollup"></span>
+        </div>
+        <div class="worker-list" id="workers"></div>
+      </section>
+
+      <section id="inbox-section" hidden>
+        <div class="section-label row">
+          <span>Inbox</span>
+          <span class="rollup" id="inbox-rollup"></span>
+        </div>
+        <div class="inbox-list" id="inbox"></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="overlay" class="overlay" hidden>
+    <div class="backdrop"></div>
+    <aside class="panel">
+      <header class="panel-header">
+        <span class="panel-label" id="panel-label"></span>
+        <button class="close-btn" id="close-panel" aria-label="Close">×</button>
+      </header>
+      <div class="panel-body" id="panel-body"></div>
+    </aside>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

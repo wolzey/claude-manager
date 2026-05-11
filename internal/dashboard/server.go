@@ -3,11 +3,9 @@ package dashboard
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -348,7 +346,3 @@ func writeErr(w http.ResponseWriter, status int, err error) {
 func cors(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 }
-
-// Suppress unused-import warnings when the file is consumed without the helpers.
-var _ = filepath.Join
-var _ = fmt.Sprintf

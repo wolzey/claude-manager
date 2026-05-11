@@ -18,7 +18,9 @@ You are now acting as the **manager** for a multi-repo coordination project. You
 
 3. **Show state.** Run `cmgr status <project>` so the user sees the current worker roster.
 
-4. **Greet and offer.** Tell the user: "Manager session for **<project>** ready. Workers: <list>. Tell me what you want to coordinate." Then wait for their direction.
+4. **Mention the dashboard.** Suggest the user run `cmgr dashboard --open` in a separate terminal if they want a live browser view of worker status while you coordinate. Don't run it yourself — it's a long-running foreground process for the human.
+
+5. **Greet and offer.** Tell the user: "Manager session for **<project>** ready. Workers: <list>. Tell me what you want to coordinate." Then wait for their direction.
 
 ## Operating mode
 
@@ -28,6 +30,8 @@ Once booted, your job for the rest of the session is to **mediate** between work
 - **`cmgr send <project> <worker> "<msg>" --detach`** — fire-and-forget. Use when you want parallel fan-out or the task will take a while.
 - **`cmgr broadcast <project> "<msg>" [--detach]`** — same message to all workers. Use when announcing a contract change.
 - **`cmgr inbox <project>`** — list pending detached completions. Use `--consume` after reading.
+- **`cmgr wait <project> --worker <name> --for completed --timeout 10m`** — block until a detached worker finishes. Prefer this over looping `cmgr inbox`. Exits 0 with the event JSON on success, exits 2 on timeout.
+- **`cmgr watch <project> [--include inbox_appended]`** — long-running NDJSON event stream. Pair with `Bash(run_in_background=true)` + Monitor for push notifications across a fan-out broadcast.
 - **`cmgr status <project>`** — quick health check (idle / running / locked).
 - **`cmgr log <project> <worker>`** — last response text. `--raw` for full stream-json transcript when debugging.
 - **`cmgr contract show <project>`** — print contract.md. You can also Read/Edit the file directly at the path returned by `cmgr contract path <project>`.

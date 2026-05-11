@@ -47,6 +47,23 @@ cmgr status <project>
 cmgr inbox <project> [--consume] [--format json]
 ```
 
+### Monitoring (push-style, no polling)
+```
+cmgr watch <project> [--worker <name>] [--include worker_changed,inbox_appended,contract_changed] [--since 5m]
+cmgr wait  <project> [--worker <name>] [--for completed|error|idle|change|inbox] [--timeout 10m]
+cmgr dashboard [--port 7777] [--open]
+```
+
+- **`cmgr wait`** is the preferred pattern when you've dispatched a detached send and need
+  to know when it finishes. It blocks until the condition is met (exit 0) or the timeout
+  fires (exit 2). The triggering event is printed to stdout as JSON.
+- **`cmgr watch`** emits NDJSON events to stdout, one per state change. Designed for
+  `Bash(run_in_background=true)` + `Monitor` consumption — each line becomes one Monitor
+  notification.
+- **`cmgr dashboard`** is for the **human** — opens a browser dashboard at
+  `http://127.0.0.1:7777/` with live project / worker status. Not for Claude to call;
+  mention it to the user when they ask for a visual view.
+
 - **Sync send** (default): blocks until the worker replies, prints final assistant text to stdout, exits nonzero on worker error.
 - **`--detach`**: fork-and-forget; completion lands in `inbox.jsonl`. Use for parallel fan-out.
 - **`broadcast`**: same message to all workers; parallel if `--detach`, sequential and goroutine-fanned-out if not.
@@ -74,6 +91,14 @@ cmgr contract path <project>
 ### Q&A across repos
 - Sync: `cmgr send proj backend "How does the orders endpoint serialize line items today?"` — manager waits, gets answer inline.
 - Parallel: `cmgr broadcast proj "What's the build command in your repo?" --detach` then `cmgr inbox proj --consume`.
+
+### Push-style waits (preferred over polling)
+- After a detached send: `cmgr wait proj --worker backend --for completed --timeout 10m`.
+  Blocks until the worker finishes; exits 2 on timeout. Replaces the older pattern of
+  looping `cmgr inbox` with Monitor.
+- For a fan-out broadcast: run `cmgr watch proj --include inbox_appended` in the background
+  (Bash `run_in_background=true`), tail it with `Monitor` until every expected worker has
+  reported, then `cmgr inbox proj --consume` once.
 
 ### Implement on one side, verify on the other
 - `cmgr send proj backend "Add X-Request-ID header to the /orders endpoint. Use the shape in contract.md."` — sync, get diff confirmation.

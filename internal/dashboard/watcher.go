@@ -131,15 +131,6 @@ func (w *Watcher) Run(ctx context.Context) error {
 }
 
 func (w *Watcher) handle(fsw *fsnotify.Watcher, ev fsnotify.Event) {
-	// Debounce — skip if we emitted for this path within the window.
-	w.mu.Lock()
-	if last, ok := w.lastEmit[ev.Name]; ok && time.Since(last) < w.debounce {
-		w.mu.Unlock()
-		return
-	}
-	w.lastEmit[ev.Name] = time.Now()
-	w.mu.Unlock()
-
 	// New directory: make sure we watch it.
 	if ev.Op&(fsnotify.Create) != 0 {
 		if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
