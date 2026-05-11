@@ -134,6 +134,14 @@ function workerRow(w) {
   } else {
     body.appendChild(el('div', null, '(no cached result yet)'));
   }
+  const tailBtn = el('button', 'link-btn tail-btn', null);
+  tailBtn.innerHTML = '▶ Live tail <span class="chev">→</span>';
+  tailBtn.style.marginTop = '12px';
+  tailBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openLiveTail(w.name);
+  });
+  body.appendChild(tailBtn);
   inner.appendChild(body);
   expand.appendChild(inner);
 
@@ -263,6 +271,70 @@ async function openContract() {
   }
 }
 
+function openLiveTail(workerName) {
+  if (!state.activeSlug) return;
+  closeTailStream(); // close any prior stream
+  $('panel-label').innerHTML = `LIVE TAIL · ${escape(workerName)} <span class="tail-live">● LIVE</span>`;
+  const body = $('panel-body');
+  body.innerHTML = '';
+  const pane = el('div', 'tail-pane');
+  body.appendChild(pane);
+  showPanel();
+
+  const url = `/api/projects/${encodeURIComponent(state.activeSlug)}/workers/${encodeURIComponent(workerName)}/log/stream`;
+  const sse = new EventSource(url);
+  state.tailStream = sse;
+  state.tailPane = pane;
+
+  sse.onmessage = (e) => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch { return; }
+    appendTailEvent(pane, ev);
+  };
+  sse.onerror = () => {
+    const indicator = document.querySelector('.tail-live');
+    if (indicator) { indicator.textContent = '○ DISCONNECTED'; indicator.classList.add('disconnected'); }
+  };
+}
+
+function appendTailEvent(pane, ev) {
+  const block = el('div', 'tail-event tail-' + ev.kind);
+  if (ev.kind === 'assistant') {
+    block.appendChild(el('span', 'tail-prefix', 'assistant'));
+    block.appendChild(el('span', 'tail-text', ev.text || ''));
+  } else if (ev.kind === 'tool_use') {
+    block.appendChild(el('span', 'tail-prefix', 'tool'));
+    const t = el('span', 'tail-text');
+    t.appendChild(el('span', 'tail-tool', ev.tool || ''));
+    if (ev.input) t.appendChild(document.createTextNode(' ' + ev.input));
+    block.appendChild(t);
+  } else if (ev.kind === 'tool_result') {
+    block.appendChild(el('span', 'tail-prefix', 'result'));
+    block.appendChild(el('span', 'tail-text tail-muted', ev.output || ''));
+  } else if (ev.kind === 'result') {
+    block.appendChild(el('span', 'tail-prefix', 'done'));
+    block.appendChild(el('span', 'tail-text', ev.text || ''));
+  } else if (ev.kind === 'error') {
+    block.appendChild(el('span', 'tail-prefix', 'error'));
+    block.appendChild(el('span', 'tail-text tail-err', ev.text || ''));
+  } else if (ev.kind === 'system') {
+    block.appendChild(el('span', 'tail-prefix', 'system'));
+    block.appendChild(el('span', 'tail-text tail-muted', ev.text || ''));
+  }
+  // Auto-scroll only if user is already near the bottom.
+  const atBottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 80;
+  pane.appendChild(block);
+  if (atBottom) pane.scrollTop = pane.scrollHeight;
+}
+
+function closeTailStream() {
+  if (state.tailStream) {
+    try { state.tailStream.close(); } catch {}
+    state.tailStream = null;
+    state.tailPane = null;
+  }
+}
+
 async function openInboxPanel() {
   if (!state.activeSlug) return;
   $('panel-label').textContent = 'INBOX';
@@ -317,6 +389,7 @@ function showPanel() {
 function closePanel() {
   const o = $('overlay');
   o.classList.remove('open');
+  closeTailStream();
   setTimeout(() => { o.hidden = true; }, 280);
 }
 

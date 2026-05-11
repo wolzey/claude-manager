@@ -96,6 +96,8 @@ func (s *Server) handleProjectSub(w http.ResponseWriter, r *http.Request) {
 		s.writeWorker(w, r, slug, parts[2])
 	case len(parts) == 4 && parts[1] == "workers" && parts[3] == "log":
 		s.writeWorkerLog(w, r, slug, parts[2])
+	case len(parts) == 5 && parts[1] == "workers" && parts[3] == "log" && parts[4] == "stream":
+		s.writeLogStream(w, r, slug, parts[2])
 	default:
 		http.NotFound(w, r)
 	}
