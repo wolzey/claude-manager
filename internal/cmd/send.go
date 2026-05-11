@@ -100,6 +100,7 @@ func runForeground(slug string, w *store.Worker, message string, budget float64,
 	w.LastRunAt = &now
 	_ = store.SaveWorker(slug, w)
 
+	freshPlanPath := ""
 	start := time.Now()
 	res, runErr := runner.Run(runner.Options{
 		Prompt:         message,
@@ -122,8 +123,15 @@ func runForeground(slug string, w *store.Worker, message string, budget float64,
 		return runErr
 	}
 	if res.IsError {
-		w.Status = store.StatusError
 		w.LastError = res.Text
+		// If a plan was pending before this (failed) send, keep the worker in
+		// plan_pending so the user can retry approval. The plan file is still
+		// on disk; only the execution failed.
+		if w.PendingPlan != "" {
+			w.Status = store.StatusPlanPending
+		} else {
+			w.Status = store.StatusError
+		}
 	} else if permMode != "plan" && w.PendingPlan != "" {
 		// Successful non-plan execution clears any prior pending plan (this is
 		// what `cmgr plan approve` relies on — the plan is now executed).
@@ -139,6 +147,7 @@ func runForeground(slug string, w *store.Worker, message string, budget float64,
 			now := time.Now().UTC()
 			w.PendingPlanAt = &now
 			w.Status = store.StatusPlanPending
+			freshPlanPath = planPath
 		} else {
 			fmt.Fprintf(os.Stderr, "[cmgr] failed to persist plan: %v\n", err)
 			w.Status = store.StatusIdle
@@ -159,9 +168,9 @@ func runForeground(slug string, w *store.Worker, message string, budget float64,
 	fmt.Println(res.Text)
 	fmt.Fprintf(os.Stderr, "\n[cmgr] worker=%s mode=%s elapsed=%s cost=$%.4f stop_reason=%s\n",
 		w.Name, permMode, elapsed.Round(time.Millisecond), res.TotalCostUSD, res.StopReason)
-	if w.Status == store.StatusPlanPending {
+	if freshPlanPath != "" {
 		fmt.Fprintf(os.Stderr, "[cmgr] plan saved to %s — review with `cmgr plan show %s %s`\n",
-			w.PendingPlan, slug, w.Name)
+			freshPlanPath, slug, w.Name)
 	}
 	if res.IsError {
 		return fmt.Errorf("worker reported error")
@@ -275,8 +284,12 @@ func detachedRunCmd() *cobra.Command {
 				ev.Type = "error"
 				ev.Error = res.Text
 				ev.CostUSD = res.TotalCostUSD
-				w.Status = store.StatusError
 				w.LastError = res.Text
+				if w.PendingPlan != "" {
+					w.Status = store.StatusPlanPending
+				} else {
+					w.Status = store.StatusError
+				}
 			} else if permMode == "plan" && strings.TrimSpace(res.Text) != "" {
 				planPath, err := capturePlan(slug, worker, res.Text)
 				if err == nil {

@@ -128,6 +128,14 @@ Workers run in `plan` mode by default. Every task goes through:
 - `cmgr send proj backend "Add X-Request-ID header to the /orders endpoint. Use the shape in contract.md."` — sync, get diff confirmation.
 - `cmgr send proj frontend "Read the request to /orders and confirm X-Request-ID is now propagated."` — sync, verify.
 
+## Auth constraint
+
+`cmgr` shells out to `claude -p` for every worker send. The `claude -p` subprocess needs the same subscription OAuth context that an interactive Claude Code session has — empirically, this context isn't fully reconstructible from `CLAUDE_CONFIG_DIR` plus the visible `CLAUDE_CODE_*` env vars alone (likely macOS Keychain ACL bound to the parent process tree). So:
+
+- **Run `cmgr` (and `cmgr dashboard`) from inside a Claude Code-spawned shell.** That includes the shell Claude itself uses for Bash tool calls and any terminal you opened via Claude Code. Running `cmgr send` / `cmgr plan approve` from a plain terminal that wasn't spawned by a Claude Code session will 401 with "Not logged in · Please run /login".
+- Failed sends preserve the worker's `plan_pending` status (when there's a pending plan) so you can retry the approval from an authed shell without losing the captured plan.
+- The dashboard's "Approve & execute" button calls back into `cmgr` from the dashboard server's process. If you started `cmgr dashboard` from a non-authed shell, the approve button will 401 too — start the dashboard from inside a Claude Code session.
+
 ## Failure modes & recovery
 
 - **`worker "X" is busy (lock held)`** — another send is in flight. Run `cmgr status <proj>`. If a `running` worker is actually dead (e.g. CLI crashed), `rm ~/.claude/manager/projects/<slug>/locks/<worker>.lock` to clear. Last resort.
