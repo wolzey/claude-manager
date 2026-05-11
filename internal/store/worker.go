@@ -20,16 +20,17 @@ const (
 )
 
 type Worker struct {
-	Name         string       `json:"name"`
-	SessionID    string       `json:"session_id"`
-	RepoPath     string       `json:"repo_path"`
-	AllowedTools string       `json:"allowed_tools,omitempty"`
-	Model        string       `json:"model,omitempty"`
-	Status       WorkerStatus `json:"status"`
-	Initialized  bool         `json:"initialized"`
-	LastRunAt    *time.Time   `json:"last_run_at,omitempty"`
-	LastError    string       `json:"last_error,omitempty"`
-	CreatedAt    time.Time    `json:"created_at"`
+	Name           string       `json:"name"`
+	SessionID      string       `json:"session_id"`
+	RepoPath       string       `json:"repo_path"`
+	AllowedTools   string       `json:"allowed_tools,omitempty"`
+	PermissionMode string       `json:"permission_mode,omitempty"`
+	Model          string       `json:"model,omitempty"`
+	Status         WorkerStatus `json:"status"`
+	Initialized    bool         `json:"initialized"`
+	LastRunAt      *time.Time   `json:"last_run_at,omitempty"`
+	LastError      string       `json:"last_error,omitempty"`
+	CreatedAt      time.Time    `json:"created_at"`
 }
 
 func CreateWorker(slug, name, repoPath, allowedTools, model string) (*Worker, error) {

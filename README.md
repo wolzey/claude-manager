@@ -57,7 +57,7 @@ See `cmgr <command> --help` for full options.
 
 ```
 cmgr project   new | ls | show | rm
-cmgr worker    add | ls | show | rm
+cmgr worker    add | ls | show | rm | set | elevate
 cmgr send      <project> <worker> "<msg>" [--detach] [--budget N] [--model M]
 cmgr broadcast <project> "<msg>"          [--detach] [--budget N]
 cmgr log       <project> <worker>          [--raw] [--follow]
@@ -103,7 +103,8 @@ The plugin is the binary + commands + skill. The CLI's project state lives outsi
 - `--output-format stream-json` requires `--verbose`. Runner passes both.
 - Runner strips `ANTHROPIC_API_KEY` from child env unconditionally. Verify via `apiKeySource: none` (or `subscription`) in the `system:init` line of `logs/<name>.jsonl`.
 - Concurrency: one in-flight send per worker (POSIX `flock`). Parallel = across workers only.
-- Default permission mode: `acceptEdits` (auto-approve edits, prompt on Bash). Override per worker with `--allowed-tools`.
+- Default permission mode: `acceptEdits` (auto-approve edits, prompt on Bash). Override per worker by storing `permission_mode` on the worker via `cmgr worker set <p> <w> --permission-mode <mode>` or `cmgr worker elevate <p> <w>` (defaults to `bypassPermissions`).
+- Worker tools and permissions can be widened post-creation without losing session history: `cmgr worker set <project> <worker> --allowed-tools "..."` or `cmgr worker elevate <project> <worker>`.
 - Default budget: $5 per send. Override with `--budget` or `~/.claude/manager/config.yaml`.
 
 ## Uninstall

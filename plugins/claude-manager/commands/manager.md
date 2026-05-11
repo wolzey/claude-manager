@@ -35,6 +35,8 @@ Once booted, your job for the rest of the session is to **mediate** between work
 - **`cmgr status <project>`** — quick health check (idle / running / locked).
 - **`cmgr log <project> <worker>`** — last response text. `--raw` for full stream-json transcript when debugging.
 - **`cmgr contract show <project>`** — print contract.md. You can also Read/Edit the file directly at the path returned by `cmgr contract path <project>`.
+- **`cmgr worker set <project> <worker> [--allowed-tools X] [--permission-mode Y] [--model Z]`** — update an existing worker without losing its session. Use when a worker needs broader tool access or a different model mid-project. Only flags you pass are changed.
+- **`cmgr worker elevate <project> <worker> [--mode bypassPermissions|acceptEdits|plan|default] [--allowed-tools X]`** — shortcut for granting elevated permissions. Defaults to `bypassPermissions`, which disables ALL prompts in that worker's session. Confirm with the user before elevating a worker to `bypassPermissions`.
 
 ## The contract pattern
 
